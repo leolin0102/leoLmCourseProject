@@ -1,0 +1,108 @@
+---
+title: "Assignment Write up Human activity prediction"
+author: "Leo Lin"
+date: "2014年9月21日"
+output: html_document
+---
+
+This project is aimed to fit a Model, which captures the way of the persons are doing weight lifting. The model should can predict which class user belong to it (A,B,C,D or E), through the data from sensors.
+
+Note: Notice that both of training data and testing data has lots of nearZeroData, so first of all, the NA and near Zero column should be removed.
+
+Steps to build the model:
+
+1. Load the training datat from .csv file.
+2. Use nearZeroVar to remove near zero column.
+3. Count the NA of each column, remove the column which has too much NA value.
+4. Try to use Random Forest to fit the model
+
+```{r}
+library(caret);library(kernlab)
+library(lattice)
+library(ggplot2)
+
+# load data
+trainData <- read.csv("pml-training.csv",na.strings=c("NA",""))
+
+#cleanup data
+nsv <- nearZeroVar(trainData, saveMetrics = TRUE)
+
+cleanTrainData <- trainData[,-nsv$nzv]
+
+#cleanup NA which's left.
+NAs <- apply(cleanTrainData,2,function(x) {sum(is.na(x))}) 
+
+cleanTrainData <- cleanTrainData[,which(NAs == 0)]
+
+trainIndex <- createDataPartition(y = cleanTrainData$classe, p=0.5,list=FALSE) 
+trainingData <- cleanTrainData[trainIndex,]
+vtestingData <- cleanTrainData[-trainIndex,]
+
+#remove no used column
+removeIndex <- grep("X|user_name|timestamp|new_window",names(trainingData))
+trainingData<- trainingData[,-removeIndex]
+vtestingData<- vtestingData[,-removeIndex]
+
+#use parallel processing
+set.seed(1235)
+library(doMC)
+registerDoMC(cores = 4)
+modFit <- train(trainingData$classe ~.,data = trainingData,method="rf", parallel=TRUE)
+
+
+#Predict
+predictions <- predict(modFit, newdata = vtestingData)
+```
+5. Using cross vailidation data to estimate the predict error.
+```{r}
+
+#Estimate cross validataion error
+
+1-(sum(predictions==vtestingData$classe)/dim(vtestingData)[1])
+```
+
+Now we can use the modFit to predict pml-testing.csv data.
+
+```{r}
+#predict pml-testing
+predictData <- read.csv("pml-testing.csv",na.strings=c("NA",""))
+
+nsv <- nearZeroVar(predictData, saveMetrics = TRUE)
+cleanPredictData <- predictData[,-nsv$nzv]
+
+NAs <- apply(cleanPredictData,2,function(x) {sum(is.na(x))}) 
+cleanPredictData <- cleanPredictData[,which(NAs == 0)]
+
+removeIndex <- grep("user_name|timestamp|new_window",names(cleanPredictData))
+predictingData <- cleanPredictData[,-removeIndex]
+
+
+predictions1 <- predict(modFit, newdata = predictingData)
+
+data.frame(predictData$user_name, predictions1)
+```
+
+
+
+```{r}
+#assignment Submission
+
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(predictions1)
+
+```
+
+plots:
+
+```{r, echo=FALSE}
+
+```
+
